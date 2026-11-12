@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SBMAA Ledger</title>
+<style>
+:root {
+  --bg: #fbfaf9; --surface: #fff; --fg: #1f1c1c; --muted: #6b6363; --line: #e7e1e0; --line-strong: #bdb3b2;
+  --crimson: #9d0720; --green: #177d4d; --tint: #f6eeee; --edit: #fff4cc; --edit-fg: #6a5200;
+  --font: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --bg: #151313; --surface: #1d1a1a; --fg: #ece6e5; --muted: #a39998; --line: #2e2929; --line-strong: #4a4242;
+  --crimson: #ff6b7f; --green: #5cc994; --tint: #261e1f; --edit: #3a3214; --edit-fg: #f0d98a; color-scheme: dark } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 var(--font); font-variant-numeric: tabular-nums; padding: 20px 16px 48px; }
+.wrap { max-width: 1280px; margin: 0 auto; display: grid; gap: 14px; }
+header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 8px 24px; border-bottom: 2px solid var(--crimson); padding-bottom: 10px; }
+.org { color: var(--green); font-weight: 700; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; }
+h1 { color: var(--crimson); font-size: 26px; margin: 2px 0 0; }
+.meta { color: var(--muted); font-size: 13px; text-align: right; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+label.f { display: grid; gap: 2px; font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: .4px; text-transform: uppercase; }
+input, select, button, textarea { font: inherit; font-size: 13px; padding: 6px 8px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--fg); min-width: 0; }
+button { cursor: pointer; }
+button.primary { background: var(--crimson); border-color: var(--crimson); color: #fff; font-weight: 600; }
+button:disabled { opacity: .5; cursor: default; }
+.grow { flex: 1 1 220px; } .grow input { width: 100%; }
+.status { font-size: 13px; color: var(--muted); }
+.status.err { color: var(--crimson); font-weight: 600; }
+.status.ok { color: var(--green); font-weight: 600; }
+.totals { display: flex; flex-wrap: wrap; gap: 6px 22px; font-size: 13px; }
+.totals b { font-size: 15px; }
+.scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+table { width: 100%; min-width: 1000px; border-collapse: collapse; }
+th, td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; text-align: left; }
+th { position: sticky; top: 0; background: var(--surface); font-size: 11px; letter-spacing: .8px; text-transform: uppercase; color: var(--muted); border-bottom: 1.5px solid var(--line-strong); cursor: pointer; white-space: nowrap; }
+td.n { text-align: right; white-space: nowrap; }
+td.d { white-space: nowrap; }
+.p { font-weight: 500; overflow-wrap: anywhere; }
+.bd { color: var(--muted); font-size: 11.5px; overflow-wrap: anywhere; }
+tr.changed td { background: var(--edit); }
+td select, td input { width: 100%; font-size: 12.5px; padding: 4px 6px; }
+td.fund { width: 120px; } td.line { width: 210px; } td.flag { width: 82px; } td.memo { width: 26%; }
+.neg { color: var(--crimson); }
+.more { text-align: center; padding: 10px; }
+.hide { display: none !important; }
+small.hint { color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div><div class="org">Saifee Burhani Medical Association of America</div><h1>Master ledger</h1></div>
+    <div class="meta" id="meta">Chase 9803, 7673 and card 5525</div>
+  </header>
+
+  <section class="panel" id="connect">
+    <div class="row">
+      <label class="f">Repository<input id="repo" placeholder="owner/repo" size="22"></label>
+      <label class="f">Branch<input id="branch" value="main" size="8"></label>
+      <label class="f grow">GitHub token<input id="token" type="password" placeholder="fine-grained token with Contents: read and write on this repo" autocomplete="off"></label>
+      <label class="f">Your name<input id="who" placeholder="for the commit message" size="14"></label>
+      <button class="primary" id="load">Load ledger</button>
+    </div>
+    <small class="hint">The token stays in this browser only. Make one at github.com → Settings → Developer settings → Fine-grained tokens, limited to this repository, permission Contents: Read and write.</small>
+  </section>
+
+  <section class="panel hide" id="tools">
+    <div class="row">
+      <label class="f grow">Search<input id="q" type="search" placeholder="payee, memo, bank text, amount or id"></label>
+      <label class="f">Fund<select id="fFund"></select></label>
+      <label class="f">Line<select id="fLine"></select></label>
+      <label class="f">Account<select id="fAcct"></select></label>
+      <label class="f">Year<select id="fYear"></select></label>
+      <label class="f">Flag<select id="fFlag"><option value="">Any</option><option value="ASK">ASK</option><option value="CHECK">CHECK</option><option value="ASK|CHECK">ASK or CHECK</option><option value="-">No flag</option></select></label>
+      <label class="f">Show<select id="fEd"><option value="">All</option><option value="1">My unsaved edits</option></select></label>
+    </div>
+  </section>
+
+  <section class="panel hide" id="savebar">
+    <div class="row">
+      <div class="totals grow" id="totals"></div>
+      <label class="f grow">Note for this save (optional)<input id="note" placeholder="e.g. answered ASK items from Oct statement"></label>
+      <button id="discard">Discard edits</button>
+      <button id="dl">Download CSV</button>
+      <button class="primary" id="save" disabled>Save to GitHub</button>
+    </div>
+  </section>
+  <div class="status" id="status"></div>
+
+  <div class="scroll hide" id="grid">
+    <table>
+      <thead><tr>
+        <th data-k="date">Date</th><th data-k="account">Account</th><th data-k="payee">Payee / bank text</th><th data-k="amount" style="text-align:right">Amount</th>
+        <th data-k="fund">Fund</th><th data-k="line">Line</th><th data-k="flag">Flag</th><th data-k="memo">Memo</th>
+      </tr></thead>
+      <tbody id="tb"></tbody>
+    </table>
+    <div class="more hide" id="moreWrap"><button id="more">Show more</button></div>
+  </div>
+</div>
+
+<script>
+const TX_PATH = 'data/transactions.csv', CAT_PATH = 'data/categories.csv';
+const EDITABLE = ['fund', 'line', 'flag', 'memo'];
+const PAGE = 250;
+const $ = id => document.getElementById(id);
+const store = { get(k, d) { try { const v = localStorage.getItem('sbmaa-' + k); return v == null ? d : v; } catch (e) { return d; } },
+                set(k, v) { try { localStorage.setItem('sbmaa-' + k, v); } catch (e) {} } };
+
+let COLS = [], TX = [], BYID = {}, CATS = [], LINES = {}, FUNDS = [], SHA = null, EDITS = {}, shown = PAGE, sortK = 'date', sortDir = -1;
+
+// ---------- CSV
+function parseCSV(text) {
+  const rows = []; let row = [], f = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += c; }
+    else if (c === '"') q = true;
+    else if (c === ',') { row.push(f); f = ''; }
+    else if (c === '\n') { row.push(f); rows.push(row); row = []; f = ''; }
+    else if (c !== '\r') f += c;
+  }
+  if (f !== '' || row.length) { row.push(f); rows.push(row); }
+  const head = rows.shift();
+  return { head, rows: rows.filter(r => r.length > 1).map(r => Object.fromEntries(head.map((h, i) => [h, r[i] ?? '']))) };
+}
+const cell = v => /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+const toCSV = (head, rows) => [head.join(','), ...rows.map(r => head.map(h => cell(String(r[h] ?? ''))).join(','))].join('\n') + '\n';
+
+// ---------- GitHub
+const cfg = () => ({ repo: $('repo').value.trim(), branch: $('branch').value.trim() || 'main', token: $('token').value.trim() });
+async function gh(path, opt = {}) {
+  const { repo, token } = cfg();
+  const r = await fetch(`https://api.github.com/repos/${repo}/${path}`, { ...opt, headers: { Accept: 'application/vnd.github+json', ...(token ? { Authorization: 'Bearer ' + token } : {}), ...(opt.headers || {}) } });
+  if (!r.ok) { const t = await r.text(); const e = new Error(`GitHub ${r.status}: ${t.slice(0, 200)}`); e.status = r.status; throw e; }
+  return r;
+}
+const b64dec = s => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\n/g, '')), c => c.charCodeAt(0)));
+const b64enc = s => { const b = new TextEncoder().encode(s); let o = ''; for (let i = 0; i < b.length; i += 0x8000) o += String.fromCharCode(...b.subarray(i, i + 0x8000)); return btoa(o); };
+async function getFile(path) {
+  const { branch } = cfg();
+  const meta = await (await gh(`contents/${path}?ref=${encodeURIComponent(branch)}`)).json();
+  const text = meta.content && meta.encoding === 'base64' && meta.size < 900000 ? b64dec(meta.content)
+    : await (await gh(`contents/${path}?ref=${encodeURIComponent(branch)}`, { headers: { Accept: 'application/vnd.github.raw+json' } })).text();
+  return { text, sha: meta.sha };
+}
+
+// ---------- load
+async function load() {
+  const c = cfg();
+  if (!/^[\w.-]+\/[\w.-]+$/.test(c.repo)) return status('Enter the repository as owner/repo.', 'err');
+  store.set('repo', c.repo); store.set('branch', c.branch); store.set('token', c.token); store.set('who', $('who').value.trim());
+  status('Loading…');
+  try {
+    const [tx, cat] = await Promise.all([getFile(TX_PATH), getFile(CAT_PATH)]);
+    setData(tx.text, cat.text); SHA = tx.sha;
+    status(`Loaded ${TX.length} transactions from ${c.repo}.`, 'ok');
+  } catch (e) {
+    status(e.status === 404 ? 'Repository or file not found. Check the name and that the token can read this repo.' : e.status === 401 ? 'GitHub rejected the token.' : e.message, 'err');
+  }
+}
+function setData(txText, catText) {
+  const p = parseCSV(txText); COLS = p.head; TX = p.rows; BYID = Object.fromEntries(TX.map(t => [t.id, t]));
+  CATS = parseCSV(catText).rows; LINES = {};
+  for (const c of CATS) (LINES[c.fund] ||= []).push(c.line);
+  const confYears = [...new Set(TX.map(t => t.fund).filter(f => /^CONF \d{4}$/.test(f)))];
+  for (let y = 2023; y <= new Date().getFullYear() + 1; y++) confYears.push('CONF ' + y);
+  FUNDS = [...new Set([...confYears].sort()), ...Object.keys(LINES).filter(f => f !== 'CONF *')];
+  try { EDITS = JSON.parse(store.get('edits:' + cfg().repo, '{}')); } catch (e) { EDITS = {}; }
+  for (const id in EDITS) if (!BYID[id]) delete EDITS[id];
+  const latest = TX.reduce((m, t) => t.in_bank === 'Y' && t.date > m ? t.date : m, '');
+  $('meta').innerHTML = `Chase 9803, 7673 and card 5525<br><b>Through ${latest}</b>`;
+  fillFilters(); ['tools', 'savebar', 'grid'].forEach(id => $(id).classList.remove('hide'));
+  render();
+}
+const linesFor = f => LINES[/^CONF \d{4}$/.test(f) ? 'CONF *' : f] || [];
+const opts = (arr, sel, any) => (any ? `<option value="">${any}</option>` : '') + arr.map(v => `<option${v === sel ? ' selected' : ''}>${esc(v)}</option>`).join('');
+function fillFilters() {
+  const keep = id => $(id).value;
+  const f = keep('fFund'); $('fFund').innerHTML = opts([...new Set([...FUNDS.filter(x => TX.some(t => t.fund === x))])], f, 'Any');
+  const allLines = [...new Set(TX.map(t => cur(t).line))].sort();
+  const l = keep('fLine'); $('fLine').innerHTML = opts($('fFund').value ? linesFor($('fFund').value) : allLines, l, 'Any');
+  const a = keep('fAcct'); $('fAcct').innerHTML = opts([...new Set(TX.map(t => t.account))], a, 'Any');
+  const y = keep('fYear'); $('fYear').innerHTML = opts([...new Set(TX.map(t => t.date.slice(0, 4)))].sort().reverse(), y, 'Any');
+}
+
+// ---------- edits
+const cur = t => ({ ...t, ...(EDITS[t.id] || {}) });
+function setEdit(id, k, v) {
+  const orig = BYID[id]; const e = { ...(EDITS[id] || {}) };
+  if (orig[k] === v) delete e[k]; else e[k] = v;
+  if (k === 'fund' && !linesFor(v).includes(cur({ ...orig, ...e }).line)) { const l = linesFor(v)[0] || ''; if (orig.line === l) delete e.line; else e.line = l; }
+  if (Object.keys(e).length) EDITS[id] = e; else delete EDITS[id];
+  store.set('edits:' + cfg().repo, JSON.stringify(EDITS));
+}
+const nEdits = () => Object.keys(EDITS).length;
+
+// ---------- render
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const money = v => (v < 0 ? '−$' : '$') + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function filtered() {
+  const q = $('q').value.trim().toLowerCase(), qn = q.replace(/[$,]/g, '');
+  const F = $('fFund').value, L = $('fLine').value, A = $('fAcct').value, Y = $('fYear').value, G = $('fFlag').value, E = $('fEd').value;
+  return TX.map(cur).filter(t =>
+    (!F || t.fund === F) && (!L || t.line === L) && (!A || t.account === A) && (!Y || t.date.startsWith(Y)) &&
+    (!G || (G === '-' ? !t.flag : G.split('|').includes(t.flag))) && (!E || EDITS[t.id]) &&
+    (!q || (t.payee + ' ' + t.memo + ' ' + t.bank_description + ' ' + t.id + ' ' + t.date).toLowerCase().includes(q) || (qn && /^[\d.]+$/.test(qn) && Math.abs(+t.amount).toFixed(2).includes(qn))))
+    .sort((a, b) => { const k = sortK; const x = k === 'amount' ? +a[k] - +b[k] : String(a[k]).localeCompare(String(b[k])); return (x || a.date.localeCompare(b.date)) * sortDir; });
+}
+function render() {
+  const rows = filtered();
+  const inn = rows.reduce((s, t) => s + Math.max(0, +t.amount), 0), out = rows.reduce((s, t) => s + Math.min(0, +t.amount), 0);
+  $('totals').innerHTML = `<span><b>${rows.length}</b> shown</span><span>In <b>${money(inn)}</b></span><span>Out <b>${money(out)}</b></span><span>Net <b>${money(inn + out)}</b></span>`;
+  $('save').disabled = !nEdits(); $('save').textContent = nEdits() ? `Save ${nEdits()} change${nEdits() > 1 ? 's' : ''} to GitHub` : 'Save to GitHub';
+  $('tb').innerHTML = rows.slice(0, shown).map(t => `<tr data-id="${t.id}" class="${EDITS[t.id] ? 'changed' : ''}">
+    <td class="d">${t.date}</td><td class="d">${esc(t.account)}${t.in_bank === 'N' ? '<br><small class="hint">not bank</small>' : ''}</td>
+    <td><div class="p">${esc(t.payee)}</div>${t.bank_description && t.bank_description !== t.payee ? `<div class="bd">${esc(t.bank_description)}</div>` : ''}</td>
+    <td class="n ${+t.amount < 0 ? 'neg' : ''}">${money(+t.amount)}</td>
+    <td class="fund"><select data-k="fund">${opts(FUNDS.includes(t.fund) ? FUNDS : [t.fund, ...FUNDS], t.fund)}</select></td>
+    <td class="line"><select data-k="line">${opts(linesFor(t.fund).includes(t.line) ? linesFor(t.fund) : [t.line, ...linesFor(t.fund)], t.line)}</select></td>
+    <td class="flag"><select data-k="flag">${['', 'ASK', 'CHECK'].map(v => `<option value="${v}"${v === t.flag ? ' selected' : ''}>${v || '—'}</option>`).join('')}</select></td>
+    <td class="memo"><input data-k="memo" value="${esc(t.memo)}"></td></tr>`).join('');
+  $('moreWrap').classList.toggle('hide', rows.length <= shown);
+  $('more').textContent = `Show more (${rows.length - shown} left)`;
+}
+function status(msg, kind = '') { $('status').textContent = msg; $('status').className = 'status ' + kind; }
+
+// ---------- save
+async function save() {
+  if (!nEdits()) return;
+  const who = $('who').value.trim(); store.set('who', who);
+  $('save').disabled = true; status('Saving…');
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const latest = await getFile(TX_PATH);
+      const p = parseCSV(latest.text);
+      const ids = new Set(p.rows.map(r => r.id));
+      let n = 0;
+      for (const r of p.rows) if (EDITS[r.id]) { Object.assign(r, EDITS[r.id]); n++; }
+      const lost = Object.keys(EDITS).filter(id => !ids.has(id));
+      const note = $('note').value.trim();
+      const msg = `Categorize ${n} transaction${n > 1 ? 's' : ''}${who ? ' (' + who + ')' : ''}${note ? ': ' + note : ''}`;
+      const res = await (await gh(`contents/${TX_PATH}`, { method: 'PUT', body: JSON.stringify({ message: msg, content: b64enc(toCSV(p.head, p.rows)), sha: latest.sha, branch: cfg().branch }) })).json();
+      EDITS = {}; store.set('edits:' + cfg().repo, '{}'); $('note').value = '';
+      const after = await getFile(TX_PATH); setData(after.text, CATS_TEXT()); SHA = after.sha;
+      status(`Saved ${n} change${n > 1 ? 's' : ''}. Commit ${res.commit.sha.slice(0, 7)}.${lost.length ? ` ${lost.length} edited row(s) no longer exist and were skipped.` : ''}`, 'ok');
+      return;
+    } catch (e) {
+      if (e.status === 409 && attempt < 2) continue;   // someone saved in between; refetch and reapply
+      status(e.status === 403 || e.status === 404 ? 'Save refused: the token needs Contents: Read and write on this repository.' : e.message, 'err');
+      $('save').disabled = false; return;
+    }
+  }
+}
+const CATS_TEXT = () => toCSV(['fund', 'line', 'kind', 'description'], CATS);
+function download() {
+  const rows = TX.map(cur);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([toCSV(COLS, rows)], { type: 'text/csv' }));
+  a.download = 'transactions.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+// ---------- wire up
+const DEFAULT_REPO = 'sbmedicalorg/budget';   // the private ledger repo; the page itself can be hosted anywhere
+$('repo').value = new URLSearchParams(location.search).get('repo') || store.get('repo', '') || DEFAULT_REPO;
+$('branch').value = store.get('branch', 'main'); $('token').value = store.get('token', ''); $('who').value = store.get('who', '');
+$('load').onclick = load;
+$('save').onclick = save; $('dl').onclick = download;
+$('discard').onclick = () => { if (!nEdits()) return; EDITS = {}; store.set('edits:' + cfg().repo, '{}'); render(); status('Edits discarded.'); };
+$('more').onclick = () => { shown += PAGE; render(); };
+['q', 'fLine', 'fAcct', 'fYear', 'fFlag', 'fEd'].forEach(id => $(id).addEventListener('input', () => { shown = PAGE; render(); }));
+$('fFund').addEventListener('input', () => { $('fLine').value = ''; fillFilters(); shown = PAGE; render(); });
+document.querySelector('thead').onclick = e => { const k = e.target.dataset.k; if (!k) return; sortDir = sortK === k ? -sortDir : (k === 'date' || k === 'amount' ? -1 : 1); sortK = k; render(); };
+$('tb').addEventListener('change', e => {
+  const k = e.target.dataset.k, id = e.target.closest('tr')?.dataset.id; if (!k || !id) return;
+  setEdit(id, k, e.target.value);
+  if (k === 'fund') render();
+  else { e.target.closest('tr').classList.toggle('changed', !!EDITS[id]); $('save').disabled = !nEdits(); $('save').textContent = nEdits() ? `Save ${nEdits()} change${nEdits() > 1 ? 's' : ''} to GitHub` : 'Save to GitHub'; }
+});
+window.addEventListener('beforeunload', e => { if (nEdits()) { e.preventDefault(); e.returnValue = ''; } });
+if ($('repo').value && $('token').value) load();
+</script>
+</body>
+</html>
