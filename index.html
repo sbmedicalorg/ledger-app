@@ -61,11 +61,11 @@ small.hint { color: var(--muted); font-size: 12px; }
     <div class="row">
       <label class="f">Repository<input id="repo" placeholder="owner/repo" size="22"></label>
       <label class="f">Branch<input id="branch" value="main" size="8"></label>
-      <label class="f grow">GitHub token<input id="token" type="password" placeholder="fine-grained token with Contents: read and write on this repo" autocomplete="off"></label>
+      <label class="f grow">GitHub token<input id="token" type="password" placeholder="GitHub token (see note below)" autocomplete="off"></label>
       <label class="f">Your name<input id="who" placeholder="for the commit message" size="14"></label>
       <button class="primary" id="load">Load ledger</button>
     </div>
-    <small class="hint">The token stays in this browser only. Make one at github.com → Settings → Developer settings → Fine-grained tokens, limited to this repository, permission Contents: Read and write.</small>
+    <small class="hint">The token stays in this browser only. Make one at github.com → Settings → Developer settings → Personal access tokens. A fine-grained token works only if its Resource owner is the repository's owner (a GitHub organization you belong to): choose that owner, only this repository, Contents: Read and write. If the owner is a personal account you were added to as a collaborator, use a classic token with the <b>repo</b> scope instead.</small>
   </section>
 
   <section class="panel hide" id="tools">
@@ -160,7 +160,7 @@ async function load() {
     setData(tx.text, cat.text); SHA = tx.sha;
     status(`Loaded ${TX.length} transactions from ${c.repo}.`, 'ok');
   } catch (e) {
-    status(e.status === 404 ? 'Repository or file not found. Check the name and that the token can read this repo.' : e.status === 401 ? 'GitHub rejected the token.' : e.message, 'err');
+    status(e.status === 404 ? 'GitHub can\'t see this repository with this token. Fine-grained tokens can\'t reach a repo owned by another personal account; use a classic token with the repo scope (see note above).' : e.status === 401 ? 'GitHub rejected the token.' : e.message, 'err');
   }
 }
 function setData(txText, catText) {
